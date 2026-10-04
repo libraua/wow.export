@@ -8,11 +8,17 @@
 const path = require('path');
 const os = require('os');
 
+// headless: the command line (src/cli.js) under plain Node, with a shim of
+// the NW.js runtime. the repository (or app) root is the install there.
+const HEADLESS = nw.App.headless === true;
+
 // on macOS, process.execPath points to the renderer helper binary deep inside
 // the framework, not the app root. use __dirname (app.nw/src/) instead.
-const INSTALL_PATH = process.platform === 'darwin'
-	? nw.__dirname
-	: path.dirname(process.execPath);
+const INSTALL_PATH = HEADLESS
+	? path.resolve(__dirname, '..', '..')
+	: process.platform === 'darwin'
+		? nw.__dirname
+		: path.dirname(process.execPath);
 const DATA_PATH = nw.App.dataPath;
 
 // on macOS, update manifest paths are relative to the portable root (the
@@ -39,9 +45,12 @@ const getBlenderBaseDir = () => {
 };
 
 module.exports = {
+	HEADLESS, // Running as the command line, without the GUI.
 	INSTALL_PATH, // Path to the application installation.
 	DATA_PATH, // Path to the users data directory.
-	RUNTIME_LOG: path.join(DATA_PATH, 'runtime.log'), // Path to the runtime log.
+	// Path to the runtime log (the command line keeps its own, so a run never
+	// truncates the GUI's while it is open).
+	RUNTIME_LOG: path.join(DATA_PATH, HEADLESS ? 'runtime-cli.log' : 'runtime.log'),
 	LAST_EXPORT: path.join(DATA_PATH, 'last_export'), // Location of the last export.
 	MAX_RECENT_LOCAL: 3, // Maximum recent local installations to remember.
 

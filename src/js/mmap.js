@@ -3,11 +3,60 @@
 	Authors: Kruithne <kruithne@gmail.com>
 	License: MIT
  */
+const fs = require('fs');
 const path = require('path');
 const log = require('./log');
 const constants = require('./constants');
 
-const mmap_native = require(path.join(constants.INSTALL_PATH, 'mmap.node'));
+/**
+ * stand-in for the native MmapObject when mmap.node is not available (the
+ * headless CLI under plain Node, where the shipped addon is built for NW.js):
+ * the file is read into memory instead of mapped. same surface.
+ */
+class FileBackedObject {
+	constructor() {
+		this._data = null;
+		this.lastError = '';
+	}
+
+	mapFile(file_path) {
+		try {
+			// the native object hands out a Uint8Array over the mapping
+			const buf = fs.readFileSync(file_path);
+			this._data = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+			return true;
+		} catch (e) {
+			this.lastError = e.message;
+			return false;
+		}
+	}
+
+	mapAnonymous(size) {
+		this._data = new Uint8Array(size);
+		return true;
+	}
+
+	unmap() {
+		this._data = null;
+	}
+
+	sync() {}
+
+	get data() { return this._data; }
+	get size() { return this._data ? this._data.byteLength : 0; }
+	get isMapped() { return this._data !== null; }
+}
+
+let mmap_native;
+try {
+	mmap_native = require(path.join(constants.INSTALL_PATH, 'mmap.node'));
+} catch (e) {
+	if (!constants.HEADLESS)
+		throw e;
+
+	log.write('mmap.node unavailable (%s); reading files into memory instead', e.message);
+	mmap_native = { MmapObject: FileBackedObject };
+}
 
 const virtual_files = new Set();
 
